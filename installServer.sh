@@ -1,4 +1,8 @@
 #!/bin/bash
+
+#Este script lo unico que hace es asignar un usuario para que la aplicación sea ejecutada por el, dicho usuario puede ser uno que ya exista o se crea uno nuevo,
+#posteriormente se crean varios directorios de trabajo y se copian los archivos necesarios  para la ejecutar la aplicación, dichos archivos se copian en el directorio home del usuario designado
+#con los permisos adecuados.
 clear
 echo "=== INSTALAR SERVER ==="
 echo
@@ -12,7 +16,7 @@ read usuario
 #Validando que el usuario no este vacio
 until [ ! -z "$usuario" ]; do
     clear
-    echo "=== INSTALAR SFTP SERVER ==="
+    echo "=== INSTALAR  SERVER ==="
     echo
     echo
     echo
