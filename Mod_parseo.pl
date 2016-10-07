@@ -2,6 +2,26 @@
 use strict;
 #use warnings;
 
+#Funcion para leer archivo de configuracion
+
+
+sub parse_config_file {
+    my ($config_line, $Name, $Value, $Config);
+    my ($File, $Config) = @_;
+    open (CONFIG, "$File") or die "ERROR: Config file not found : $File";
+    while (<CONFIG>) {
+        $config_line=$_;
+        chop ($config_line);          # Remove trailling \n
+        $config_line =~ s/^\s*//;     # Remove spaces at the start of the line
+        $config_line =~ s/\s*$//;     # Remove spaces at the end of the line
+        if ( ($config_line !~ /^#/) && ($config_line ne "") ){    # Ignore lines starting with # and blank lines
+            ($Name, $Value) = split (/=/, $config_line);          # Split each line into name value pairs
+            $$Config{$Name} = $Value;                             # Create a hash of the name value pairs
+        }
+    }
+    close(CONFIG);
+}
+
 # Variables para los logs de acceso de apache
 my @ip_acces = ();
 my @fecha_acces = ();
@@ -19,28 +39,43 @@ my @ip_error = ();
 my @log_error = ();
 my @msg_error = ();
 
+
+#Variables para leer el archivo de configuracion
+my $config_file= $ENV{HOME}."/Proyecto/herramienta.conf";
+my %Config = ();
+parse_config_file ($config_file, \%Config);
+my $dirApache=$Config{'directorioAccess'};
+my $dirApacheError=$Config{'directorioError'};
+my $dirPostgres=$Config{'directorioPostgres'};
+my $dirParsedApache=$Config{'parsedLogAccess'};
+my $dirParsedApacheError=$Config{'parsedLogError'};
+my $dirParsedPostgres=$Config{'parsedLogPostgres'};
+
+#En el archivo de configuracion usa el comodin  ~ en referencia al directorio HOME, Perl no puede interpretar la tilde como el directorio, para ello la sustituimos ~ por la variable de
+#entorno de Perl  que contiene el directorio HOME del usuario
+
+$dirApache =~ s/^~(\w*)/$ENV{HOME}/e;
+$dirApacheError =~ s/^~(\w*)/$ENV{HOME}/e;
+$dirPostgres =~ s/^~(\w*)/$ENV{HOME}/e;
+$dirParsedApache =~ s/^~(\w*)/$ENV{HOME}/e;
+$dirParsedApacheError =~ s/^~(\w*)/$ENV{HOME}/e;
+$dirParsedPostgres =~ s/^~(\w*)/$ENV{HOME}/e;
+
+
+
+# Checando si se mando como argumento el log de Access de Apache
 # Obtenemos los archivos generados por el modulo de obtencion de archivos
-my $log_Apache = $ARGV[0] or die "Leer log de apache\n";
-my $log_Apache_error = $ARGV[1] or die "Leer log de error de apache\n";
-my $log_Postgres = $ARGV[2] or die "Leer log de apache\n";
+if ($ARGV[0] ne "-"){
+    my $log_Apache = $ARGV[0] or die "Leer log de apache\n";
+    my $rutaAccess=$dirApache.$log_Apache;
 
 # Abrimos el archivo de los logs
-open(my $data_acces, '<', $log_Apache) or die "No se puede abrir el archivo\n";
-open(my $data_error, '<', $log_Apache_error) or die "No se puede abrir el archivo\n";
-open(my $data_postgres, '<', $log_Postgres) or die "No se puede abrir el archivo\n";
-
-# Creamos los nuevos archivos para los logs que guardara en el siguiente formato
-# $variable1;$variable2;$variable3...
-
-my $filename1 = 'acces.txt';
-my $filename2 = 'error.txt';
-
-open(my $new_acces, '>', $filename1) or die "Could not open file '$filename1' $!";
-open(my $new_error, '>', $filename2) or die "Could not open file '$filename2' $!";
-
-while (my $line1 = <$data_acces>)
-{
-	chomp $line1;
+    open(my $data_acces, '<', $rutaAccess) or die "No se puede abrir el archivo $rutaAccess\n";
+    my $filename1 = $dirParsedApache.$log_Apache;
+    open(my $new_acces, '>', $filename1) or die "Could not open file '$filename1' $!";
+    while (my $line1 = <$data_acces>)
+    {
+        chomp $line1;
 
 	# Parseamos el log de acceso apache
 	my @log_apache_array = (split " " , $line1, 12);
@@ -70,10 +105,25 @@ while (my $line1 = <$data_acces>)
 	$aux = $log_apache_array_aux[5];
 	push @UserAgent_acces,$aux;
 	print $new_acces "$ip_acces[-1];$fecha_acces[-1];$MetodoHTTP_acces[-1];$Recurso_acces[-1];$VersionHTTP_acces[-1];$CodigoHTTP_acces[-1];$Rec_size_acces[-1];$HTTP_referer_acces[-1];$UserAgent_acces[-1]\n";
+    }
+    close $new_acces;
+    close $data_acces;
 }
 
-while (my $line2 = <$data_error>)
-{
+
+# Checando si se mando como argumento el log de error de Apache
+if ($ARGV[1] ne "-"){
+    my $log_Apache_error = $ARGV[1] or die "Leer log de error de apache\n";
+    my $rutaError=$dirApacheError.$log_Apache_error;
+# Abrimos el archivo de los logs
+    open(my $data_error, '<', $rutaError) or die "No se puede abrir el archivo $rutaError\n";
+    my $filename2 = $dirParsedApacheError.$log_Apache_error;
+    open(my $new_error, '>', $filename2) or die "Could not open file '$filename2' $!";
+
+#Parseando log de Error
+
+    while (my $line2 = <$data_error>)
+    {
 	chomp $line2;
 	my @log_apache_error_array = (split /\]/ , $line2);
 	my @log_apache_error_array_aux = (split /\:/ , $line2);
@@ -92,13 +142,17 @@ while (my $line2 = <$data_error>)
 	#$aux =~ tr/^._//d;
 	push @msg_error,$aux;
 	print $new_error "$fecha_error[-1];$log_error[-1];$ip_error[-1];$msg_error[-1]\n";
+    } 
+close $new_error;
 }
 
-close $new_acces;
-close $new_error;
 
-#my $size_log_acces = `sort -t . -k 3,3n -k 4,4n $filename1 | cut -d";" -f 1 |  uniq -c`;
-#print $size_log_acces;
-#foreach my $i (0 .. $#UserAgent) {
-  #print "$UserAgent[$i]\n";
-#}
+## Checando si se mando como argumento el log de Postgres
+if ($ARGV[2] ne "-"){
+    my $log_Postgres = $ARGV[2] or die "Leer log de postgres\n";
+    my $rutaPostgres=`echo $dirPostgres$log_Postgres`;
+# Abrimos el archivo de los logs
+    open(my $data_postgres, '<', $rutaPostgres) or die "No se puede abrir el archivo  $rutaPostgres\n";
+    my $filename3 = `echo $dirParsedPostgres$log_Postgres`;
+}
+
